@@ -6,6 +6,12 @@
 #include <Windows.h>
 #include <string>
 #include <fstream>
+#include <strsafe.h>
+#include <chrono>
+#include <locale>
+#include <codecvt>
+#include <sstream>
+#include <iomanip>
 
 //#pragma comment (lib, "Shcore.lib")
 LOGFONTW * font = nullptr;
@@ -78,7 +84,8 @@ void SaveBitmap(HBITMAP hBitmap)
 
 int main()
 {
-	auto dpires =  SetProcessDPIAware();
+//	auto dpires =  SetProcessDPIAware();
+	auto dpires = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE);
 	int nScreenWidth = GetSystemMetrics(SM_CXSCREEN); //SM_CXVIRTUALSCREEN
 	int nScreenHeight = GetSystemMetrics(SM_CYSCREEN); // SM_CYVIRTUALSCREEN
 
@@ -113,50 +120,38 @@ int main()
 	}
 
 	{
-		std::wstring text(L"2019. 02. 23. 18:46:05 TCAndC");
-		RECT rcTextWnd;
-		::GetWindowRect(hDesktopWnd, &rcTextWnd);
-		//DrawText(hCaptureDC, text.c_str(), text.length(), &rcTextWnd, DT_CENTER || DT_TOP);
-		
-		auto r =  SetMapMode(hCaptureDC, MM_TEXT);
+		SIZE size{ 0,0 };
+	
+		PLOGFONT plf = (PLOGFONT)LocalAlloc(LPTR, sizeof(LOGFONT));
+		auto hr = StringCchCopy(plf->lfFaceName, 9, TEXT("Algerian"));
+		plf->lfWeight = FW_NORMAL;
+		plf->lfHeight = -96;
 
-		r= SetBkMode(hCaptureDC, TRANSPARENT);
-		//r = SetTextAlign(hCaptureDC, TA_LEFT || TA_TOP);
+		auto hfnt = CreateFontIndirect(plf);
+		auto hfntPrev = SelectObject(hCaptureDC, hfnt);
 
-	/*	auto brush =(HBRUSH) GetStockObject(WHITE_BRUSH);
-		auto oldBrush = (HBRUSH)SelectObject(hCaptureDC, brush);*/
+		auto now2 = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+		auto localTime = *std::localtime(&now2);
+		std::ostringstream oss;
+		oss << std::put_time(&localTime, "%Y.%m.%d %H:%M:%S");
 
-		//auto hFont = (HFONT)GetStockObject(ANSI_VAR_FONT);
+		//setup converter
+		std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> converter;
 
-		EnumFontFamilies(hCaptureDC, (LPCTSTR)NULL,(FONTENUMPROC)EnumFamCallBack, NULL);
-		
-		//font->lfHeight = -48;//  MulDiv(200, GetDeviceCaps(hCaptureDC, LOGPIXELSY), 72);//-font->lfHeight * 5;
-		//font->lfWidth = 0;// font->lfWidth * 5;
-		r = SetTextColor(hCaptureDC, RGB(0xaa, 0xaa, 0xaa));
-		
-		LOGFONT logFont;
-		memset(&logFont, 0, sizeof(logFont));
-		logFont.lfHeight = -96; // see PS
-		logFont.lfWeight = FW_BOLD;
-		wcscpy(logFont.lfFaceName, std::wstring(L"Algerian").c_str());
+		std::wstring time = converter.from_bytes(oss.str());
 
-		//MoveToEx(hCaptureDC, x,  y, (LPPOINT)NULL);
-		HFONT cFont = ::CreateFontIndirect(font);
+		std::wstring text = (std::wstring(L" DEMO ") + time + std::wstring(L" TCAndC ")).c_str();
 
-		auto oldFont = SelectObject(hCaptureDC, &cFont);
+		if (size.cx == 0) {
+			auto tres = GetTextExtentPoint32(hCaptureDC, text.c_str(), text.length(), &size);
+		}
 
-		SIZE size;
-		auto tres = GetTextExtentPoint32(hCaptureDC, text.c_str(), text.length(), &size);
+		auto x = nScreenWidth / 2 - size.cx / 2;
+		auto y = GetSystemMetrics(SM_CYFULLSCREEN) / 2;
 
-		auto x = rcTextWnd.right - size.cx;
-		auto y = GetSystemMetrics(SM_CYFULLSCREEN) - size.cy;
+		auto r = TextOut(hCaptureDC, x, y, text.c_str(), text.length());
 
-
-		//r = SetTextJustification(hCaptureDC, )
-		//r= ExtTextOut(hCaptureDC, rcTextWnd.left, rcTextWnd.top, ETO_NUMERICSLATIN, &rcTextWnd,text.c_str(), text.length(), NULL);
-		r= TextOut(hCaptureDC, x-300, y-300, text.c_str(), text.length());
-
-		DeleteObject(cFont);
+		DeleteObject(plf);
 	}
 
 	HDC					hdc = NULL;
